@@ -1,0 +1,7 @@
+{
+  "name": "AI Furniture Suggester",
+  "description": "An AI-powered application that suggests furniture based on a picture of your room. It also provides instructions on how to embed the app into a Blogger blog site.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
