@@ -4,11 +4,11 @@ import { ImageUploader } from './components/ImageUploader';
 import { SuggestionCard } from './components/SuggestionCard';
 import { BloggerInstructions } from './components/BloggerInstructions';
 import { Spinner } from './components/Spinner';
-import { getFurnitureSuggestions } from './services/geminiService';
+import { getFurnitureSuggestions, blendFurnitureIntoRoom } from './services/geminiService';
 import type { SuggestionCategory, FurnitureSuggestion } from './types';
 import { CameraCapture } from './components/CameraCapture';
 import { ImageEditor } from './components/ImageEditor';
-import { ARView } from './components/ARView';
+import { AIBlendedView } from './components/AIBlendedView';
 
 const App: React.FC = () => {
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -17,10 +17,13 @@ const App: React.FC = () => {
   const [stylePreference, setStylePreference] = useState<string>('Modern Minimalist');
   const [suggestions, setSuggestions] = useState<SuggestionCategory[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [isVisualizing, setIsVisualizing] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showInstructions, setShowInstructions] = useState<boolean>(false);
   const [showCamera, setShowCamera] = useState<boolean>(false);
-  const [arFurniture, setArFurniture] = useState<FurnitureSuggestion | null>(null);
+  const [blendedImageResult, setBlendedImageResult] = useState<string | null>(null);
+  const [originalImageForComparison, setOriginalImageForComparison] = useState<string | null>(null);
+
 
   const handleImageSelected = (file: File, dataUrl: string) => {
     setImageToEdit(dataUrl);
@@ -68,11 +71,26 @@ const App: React.FC = () => {
     setIsLoading(false);
     setShowCamera(false);
     setImageToEdit(null);
-    setArFurniture(null);
+    setBlendedImageResult(null);
+    setOriginalImageForComparison(null);
   };
   
-  const handleViewInAR = (suggestion: FurnitureSuggestion) => {
-    setArFurniture(suggestion);
+  const handleVisualize = async (suggestion: FurnitureSuggestion) => {
+    if (!imageBase64) {
+      setError("Original image is not available for visualization.");
+      return;
+    }
+    setIsVisualizing(true);
+    setError(null);
+    try {
+      const resultImage = await blendFurnitureIntoRoom(imageBase64, suggestion);
+      setOriginalImageForComparison(URL.createObjectURL(imageFile!));
+      setBlendedImageResult(resultImage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An unexpected error occurred during visualization.');
+    } finally {
+      setIsVisualizing(false);
+    }
   };
 
   return (
@@ -152,7 +170,7 @@ const App: React.FC = () => {
                     <h3 className="text-2xl font-semibold text-gray-700 mb-4 pb-2 border-b-2 border-indigo-200">{category.category}</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                       {category.suggestions.map((suggestion, index) => (
-                        <SuggestionCard key={index} suggestion={suggestion} onViewInAR={handleViewInAR} />
+                        <SuggestionCard key={index} suggestion={suggestion} onVisualize={handleVisualize} />
                       ))}
                     </div>
                   </div>
@@ -163,8 +181,19 @@ const App: React.FC = () => {
         )}
       </main>
       
-      {arFurniture && (
-        <ARView suggestion={arFurniture} onClose={() => setArFurniture(null)} />
+      {isVisualizing && (
+         <div className="fixed inset-0 z-50 bg-black/70 flex flex-col items-center justify-center" aria-modal="true" role="dialog">
+            <Spinner />
+            <p className="text-white mt-4 text-lg">AI is re-imagining your room...</p>
+         </div>
+      )}
+
+      {blendedImageResult && originalImageForComparison && (
+        <AIBlendedView 
+          originalImage={originalImageForComparison}
+          blendedImage={blendedImageResult}
+          onClose={() => setBlendedImageResult(null)}
+        />
       )}
     </div>
   );

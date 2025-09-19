@@ -1,5 +1,6 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { FurnitureSuggestion, SuggestionCategory } from '../types';
+import { imageUrlToBase64 } from "../utils/image";
 
 const API_KEY = process.env.API_KEY;
 
@@ -89,7 +90,47 @@ export const getFurnitureSuggestions = async (
     return parsedSuggestions;
 
   } catch (error) {
-    console.error("Error calling Gemini API:", error);
+    console.error("Error calling Gemini API for suggestions:", error);
     throw new Error("Failed to get furniture suggestions from AI. The model may be unable to process the request.");
+  }
+};
+
+export const blendFurnitureIntoRoom = async (
+  roomBase64: string,
+  furniture: FurnitureSuggestion
+): Promise<string> => {
+  try {
+    const furnitureImageBase64 = await imageUrlToBase64(furniture.imageUrl);
+    
+    const roomImagePart = {
+      inlineData: { mimeType: 'image/jpeg', data: roomBase64 }
+    };
+    const furnitureImagePart = {
+        inlineData: { mimeType: 'image/jpeg', data: furnitureImageBase64 }
+    };
+    const textPart = {
+        text: `Seamlessly integrate the furniture from the second image into the first image (the room). Place it in a suitable, empty space. Adjust lighting, shadows, and perspective to make it look hyper-realistic, as if it were originally part of the photo. Do not add any text or annotations to the final image.`
+    };
+    
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image-preview',
+        contents: {
+            parts: [roomImagePart, furnitureImagePart, textPart],
+        },
+        config: {
+            responseModalities: [Modality.IMAGE, Modality.TEXT],
+        },
+    });
+
+    for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData && part.inlineData.mimeType.startsWith('image/')) {
+            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+        }
+    }
+
+    throw new Error("AI did not return a blended image.");
+  } catch(error) {
+      console.error("Error calling Gemini API for image blending:", error);
+      throw new Error("Failed to visualize furniture with AI. " + (error instanceof Error ? error.message : ""));
   }
 };
